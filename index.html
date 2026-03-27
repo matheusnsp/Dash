@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dashboard Financeiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+<!-- CSS -->
+<link rel="stylesheet" href="style.css">
+
+<!-- JS -->
+<script src="script.js"></script>
+
+
+</head>
+<body>
+
+<div class="shell">
+  <!-- Header -->
+  <div class="header">
+    <h1>Finanças <span>Pessoais</span></h1>
+    <div class="month-filter" id="monthFilter"></div>
+  </div>
+
+  <!-- Metric Cards -->
+  <div class="metrics">
+    <div class="card green">
+      <div class="card-label">Receitas</div>
+      <div class="card-value" id="totalIncome">R$ 0</div>
+      <div class="card-sub" id="incomeCount">0 lançamentos</div>
+    </div>
+    <div class="card red">
+      <div class="card-label">Despesas</div>
+      <div class="card-value" id="totalExpense">R$ 0</div>
+      <div class="card-sub" id="expenseCount">0 lançamentos</div>
+    </div>
+    <div class="card blue">
+      <div class="card-label">Saldo</div>
+      <div class="card-value" id="balance">R$ 0</div>
+      <div class="card-sub" id="balanceSub">—</div>
+    </div>
+    <div class="card amber">
+      <div class="card-label">Taxa de Poupança</div>
+      <div class="card-value" id="savingsRate">0%</div>
+      <div class="card-sub" id="savingsSub">—</div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="charts-row">
+    <div class="chart-card">
+      <div class="chart-title">Receitas vs Despesas</div>
+      <div class="chart-sub">Comparativo mensal</div>
+      <div class="chart-wrap" style="height:240px"><canvas id="barChart"></canvas></div>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-dot" style="background:#29d47a"></div>Receitas</div>
+        <div class="leg-item"><div class="leg-dot" style="background:#f06060"></div>Despesas</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Despesas por Categoria</div>
+      <div class="chart-sub">Mês atual</div>
+      <div class="chart-wrap" style="height:200px"><canvas id="donutChart"></canvas></div>
+      <div class="legend" id="donutLegend"></div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="charts-row2">
+    <div class="chart-card">
+      <div class="chart-title">Evolução do Saldo</div>
+      <div class="chart-sub">Acumulado ao longo do tempo</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="lineChart"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Receitas por Categoria</div>
+      <div class="chart-sub">Mês atual</div>
+      <div class="chart-wrap" style="height:180px"><canvas id="incomeBarChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Bottom: form + transactions -->
+  <div class="bottom-row">
+    <div class="form-card">
+      <div class="form-title">+ Novo Lançamento</div>
+      <div class="type-toggle">
+        <button class="type-btn active-income" id="btnIncome" onclick="setType('income')">▲ Receita</button>
+        <button class="type-btn" id="btnExpense" onclick="setType('expense')">▼ Despesa</button>
+      </div>
+      <div style="height:14px"></div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <input class="form-control" id="fDesc" type="text" placeholder="Ex: Salário, Aluguel..."/>
+      </div>
+      <div class="form-group">
+        <label>Valor (R$)</label>
+        <input class="form-control" id="fAmount" type="number" min="0" step="0.01" placeholder="0,00"/>
+      </div>
+      <div class="form-group">
+        <label>Categoria</label>
+        <select class="form-control" id="fCategory"></select>
+      </div>
+      <div class="form-group">
+        <label>Data</label>
+        <input class="form-control" id="fDate" type="date"/>
+      </div>
+      <button class="btn-add" onclick="addTransaction()">Adicionar</button>
+    </div>
+
+    <div class="tx-card">
+      <div class="tx-header">
+        <div class="form-title" style="margin:0">Lançamentos</div>
+        <input class="form-control" id="txSearch" type="text" placeholder="Buscar..." oninput="renderTransactions()" style="width:160px;font-size:13px;padding:8px 12px"/>
+      </div>
+      <div class="tx-list" id="txList"></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+</body>
+<div id="lockScreen" style="
+  position:fixed;
+  inset:0;
+  background:#0d0d14;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+  flex-direction:column;
+  gap:12px;
+">
+  <h2 style="color:white;">Acesso restrito</h2>
+  <input id="passwordInput" type="password" placeholder="Digite a senha"
+    style="padding:10px;border-radius:8px;border:none;">
+  <button onclick="checkPassword()"
+    style="padding:10px 20px;border:none;border-radius:8px;background:#29d47a;cursor:pointer;">
+    Entrar
+  </button>
+  <p id="errorMsg" style="color:red;font-size:12px;"></p>
+</div>
+</html>

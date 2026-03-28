@@ -1,13 +1,11 @@
-// ── CONFIGURAÇÃO SUPABASE ───────────────────────────────────────────────────
-const SUPABASE_URL = 'https://llzzyoddlykhoowanfju.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsenp5b2RkbHlraG9vd2FuZmp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NTI4NTksImV4cCI6MjA5MDIyODg1OX0.YmxSIWjPl2xs4Ayt_jhp8HkPZkgW2xCs-D4duJuMQls';
+// ── CONFIGURAÇÃO DE SEGURANÇA (Injetado pelo Netlify no Build) ──────────────
+const SUPABASE_URL = "URL_DO_SUPABASE_AQUI";
+const SUPABASE_KEY = "CHAVE_DO_SUPABASE_AQUI";
+const SITE_PASSWORD = "MINHA_SENHA_SECRETA"; 
 
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ── CONFIGURAÇÃO DE SEGURANÇA ────────────────────────────────────────────────
-const SITE_PASSWORD = "1234"; 
-
-// ── DATA ──────────────────────────────────────────────────────────────────────
+// ── CONFIGURAÇÕES DE INTERFACE ──────────────────────────────────────────────
 const INCOME_CATS = ['Salário','Freelance','Investimentos','Aluguel','Presente','Outros'];
 const EXPENSE_CATS = ['Alimentação','Moradia','Transporte','Saúde','Lazer','Educação','Vestuário','Assinaturas','Outros'];
 const CAT_ICONS = {
@@ -22,7 +20,7 @@ let currentType = 'income';
 let selectedMonth = null;
 let barChart, donutChart;
 
-// ── DATA PERSISTENCE (Supabase) ──────────────────────────────────────────────
+// ── PERSISTÊNCIA DE DADOS (SUPABASE) ────────────────────────────────────────
 
 async function loadData() {
   const { data, error } = await supabaseClient
@@ -50,23 +48,15 @@ async function addTransaction() {
     return; 
   }
   
-  // IMPORTANTE: Não enviamos o ID, o Supabase gera sozinho
-  const newTx = { 
-    type: currentType, 
-    desc: desc, 
-    cat: cat, 
-    amount: amount, 
-    date: date 
-  };
+  const newTx = { type: currentType, desc, cat, amount, date };
 
   const { error } = await supabaseClient.from('transactions').insert([newTx]);
 
   if (error) {
     console.error('Erro de inserção:', error);
-    // Se der erro aqui, verifique se você mudou a Primary Key no Painel do Supabase
-    showToast('Erro ao salvar no banco. Verifique o ID!');
+    showToast('Erro ao salvar no banco');
   } else {
-    showToast('Lançamento salvo! ✅');
+    showToast('Salvo na nuvem! ✅');
     document.getElementById('fDesc').value = '';
     document.getElementById('fAmount').value = '';
     await loadData(); 
@@ -78,7 +68,7 @@ async function deleteTransaction(id) {
     const { error } = await supabaseClient
       .from('transactions')
       .delete()
-      .eq('id', id); // Usa o ID único gerado pelo banco
+      .eq('id', id); 
     
     if (error) {
       showToast('Erro ao deletar');
@@ -88,7 +78,7 @@ async function deleteTransaction(id) {
   }
 }
 
-// ── HELPERS / UI ─────────────────────────────────────────────────────────────
+// ── FORMATAÇÃO E UI ──────────────────────────────────────────────────────────
 function fmt(v) {
   return 'R$ ' + Math.abs(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
@@ -163,7 +153,7 @@ function updateMetrics() {
   document.getElementById('expenseCount').textContent = `${exp} lançamento${exp!==1?'s':''}`;
 }
 
-// ── CHARTS ───────────────────────────────────────────────────────────────────
+// ── GRÁFICOS (CHART.JS) ──────────────────────────────────────────────────────
 function updateBarChart() {
   const canvas = document.getElementById('barChart');
   if(!canvas) return;
@@ -202,7 +192,7 @@ function updateDonutChart() {
   });
 }
 
-// ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
+// ── AUTENTICAÇÃO E INICIALIZAÇÃO ─────────────────────────────────────────────
 function checkPassword() {
   const input = document.getElementById("passwordInput").value;
   const error = document.getElementById("errorMsg");
@@ -216,7 +206,6 @@ function checkPassword() {
   }
 }
 
-// ── REFRESH TOTAL ─────────────────────────────────────────────────────────────
 function refresh() {
   buildMonthFilter();
   updateMetrics();
@@ -245,7 +234,6 @@ function renderTransactions() {
   }).join('');
 }
 
-// Inicialização
 window.onload = async () => {
   if (localStorage.getItem("auth_financas") === "true") {
     document.getElementById("lockScreen").style.display = "none";

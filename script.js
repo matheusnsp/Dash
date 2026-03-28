@@ -208,19 +208,26 @@ function renderTransactions() {
   }).join('');
 }
 
+// ── AUTENTICAÇÃO (Sempre pede ao abrir) ─────────────────────────────────────
+
 function checkPassword() {
-  if (document.getElementById("passwordInput").value === SITE_PASSWORD) {
+  const input = document.getElementById("passwordInput").value;
+  const error = document.getElementById("errorMsg");
+
+  // O SITE_PASSWORD será injetado pelo Netlify (ex: "1234")
+  if (input === SITE_PASSWORD) {
     document.getElementById("lockScreen").style.display = "none";
-    localStorage.setItem("auth_financas", "true");
-    loadData();
-  } else { document.getElementById("errorMsg").textContent = "Senha incorreta"; }
+    // REMOVEMOS o localStorage.setItem daqui para não "lembrar" o login
+    loadData(); 
+  } else {
+    error.textContent = "Senha incorreta";
+  }
 }
 
 window.onload = async () => {
-  if (localStorage.getItem("auth_financas") === "true") {
-    document.getElementById("lockScreen").style.display = "none";
-    await loadData();
-  }
+  // REMOVEMOS a checagem automática de login. 
+  // Agora o lockScreen sempre estará visível por padrão (conforme seu HTML).
+  
   document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
   updateCategorySelect();
 };

@@ -32,7 +32,8 @@ async function loadData() {
     console.error('Erro ao buscar dados:', error);
     showToast('Erro ao carregar dados');
   } else {
-    transactions = data;
+    // Garante que amount seja sempre número para evitar bugs nos gráficos
+    transactions = data.map(t => ({ ...t, amount: parseFloat(t.amount) }));
     refresh(); 
   }
 }
@@ -124,6 +125,7 @@ function buildMonthFilter() {
   const months = getMonths();
   if (!selectedMonth || !months.includes(selectedMonth)) selectedMonth = months[0] || null;
   const cont = document.getElementById('monthFilter');
+  if(!cont) return;
   cont.innerHTML = months.map(m =>
     `<button class="month-btn${m===selectedMonth?' active':''}" onclick="selectMonth('${m}')">${monthLabel(m)}</button>`
   ).join('');
@@ -160,6 +162,7 @@ function updateBarChart() {
   const months = getMonths().slice(0,6).reverse();
   const incData = months.map(m => txForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0));
   const expData = months.map(m => txForMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0));
+  
   if (barChart) barChart.destroy();
   barChart = new Chart(canvas, {
     type: 'bar',
@@ -170,21 +173,41 @@ function updateBarChart() {
         { label:'Despesas', data:expData, backgroundColor:'rgba(240,96,96,0.7)', borderRadius:5 }
       ]
     },
-    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
+    options: { 
+      responsive:true, 
+      maintainAspectRatio:false, 
+      plugins:{legend:{display:false}},
+      scales: { y: { beginAtZero: true } }
+    }
   });
 }
 
 function updateDonutChart() {
   const canvas = document.getElementById('donutChart');
   if(!canvas) return;
+  
+  // Filtra as transações baseadas no mês selecionado
   const txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
-  const expenses = txs.filter(t=>t.type==='expense');
+  const expenses = txs.filter(t => t.type === 'expense');
+  
   const bycat = {};
-  expenses.forEach(t => { bycat[t.cat] = (bycat[t.cat]||0) + t.amount; });
+  expenses.forEach(t => { 
+    // Garante que o nome da categoria bata com o ícone/texto, ignorando erros de caixa alta/baixa
+    bycat[t.cat] = (bycat[t.cat] || 0) + t.amount; 
+  });
+  
   const labels = Object.keys(bycat);
-  const data = labels.map(l=>bycat[l]);
+  const data = labels.map(l => bycat[l]);
 
   if (donutChart) donutChart.destroy();
+  
+  if (data.length === 0) {
+    // Limpa o canvas se não houver despesas no mês
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    return;
+  }
+
   donutChart = new Chart(canvas, {
     type:'doughnut',
     data:{ labels, datasets:[{ data, backgroundColor:CAT_COLORS }] },

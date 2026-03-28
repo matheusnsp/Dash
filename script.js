@@ -1,3 +1,12 @@
+// ── CONFIGURAÇÃO SUPABASE ───────────────────────────────────────────────────
+const SUPABASE_URL = 'https://llzzyoddlykhoowanfju.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsenp5b2RkbHlraG9vd2FuZmp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NTI4NTksImV4cCI6MjA5MDIyODg1OX0.YmxSIWjPl2xs4Ayt_jhp8HkPZkgW2xCs-D4duJuMQls';
+
+// Inicializa o cliente do Supabase
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── CONFIGURAÇÃO DE SEGURANÇA ────────────────────────────────────────────────
+const SITE_PASSWORD = "1234"; 
 
 // ── DATA ──────────────────────────────────────────────────────────────────────
 const INCOME_CATS = ['Salário','Freelance','Investimentos','Aluguel','Presente','Outros'];
@@ -9,13 +18,71 @@ const CAT_ICONS = {
 };
 const CAT_COLORS = ['#29d47a','#5b8af5','#f5b642','#f06060','#a78bfa','#2dd4bf','#f472b6','#fb923c','#7a7a95'];
 
+let transactions = []; // Agora vem do banco
 let currentType = 'income';
 let selectedMonth = null;
-let barChart, donutChart, lineChart, incomeBarChart;
+let barChart, donutChart;
 
-// ── DATA (LIMPO) ─────────────────────────────────────────────────────────────
-let transactions = [];
-let nextId = 1;
+// ── DATA PERSISTENCE (Supabase) ──────────────────────────────────────────────
+
+// BUSCAR DADOS DO BANCO
+async function loadData() {
+  const { data, error } = await supabaseClient
+    .from('transactions')
+    .select('*')
+    .order('date', { ascending: false });
+
+  if (error) {
+    console.error('Erro ao buscar dados:', error);
+    showToast('Erro ao carregar dados da nuvem');
+  } else {
+    transactions = data;
+    refresh(); 
+  }
+}
+
+// SALVAR NO BANCO
+async function addTransaction() {
+  const desc = document.getElementById('fDesc').value.trim();
+  const amount = parseFloat(document.getElementById('fAmount').value);
+  const cat = document.getElementById('fCategory').value;
+  const date = document.getElementById('fDate').value;
+  
+  if (!desc || !amount || amount <= 0 || !date) { 
+    showToast('Preencha todos os campos'); 
+    return; 
+  }
+  
+  const newTx = { type: currentType, desc, cat, amount, date };
+
+  const { error } = await supabaseClient.from('transactions').insert([newTx]);
+
+  if (error) {
+    console.error('Erro ao inserir:', error);
+    showToast('Erro ao salvar no banco');
+  } else {
+    showToast('Lançamento salvo na nuvem! ✅');
+    document.getElementById('fDesc').value = '';
+    document.getElementById('fAmount').value = '';
+    await loadData(); // Recarrega os dados para atualizar os gráficos
+  }
+}
+
+// EXCLUIR DO BANCO
+async function deleteTransaction(id) {
+  if(confirm("Deseja excluir permanentemente este lançamento?")) {
+    const { error } = await supabaseClient
+      .from('transactions')
+      .delete()
+      .eq('id', id);
+    
+    if (error) {
+      showToast('Erro ao deletar');
+    } else {
+      await loadData();
+    }
+  }
+}
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 function fmt(v) {
@@ -26,6 +93,7 @@ function getMonths() {
   return [...set].sort().reverse();
 }
 function monthLabel(ym) {
+  if(!ym) return "";
   const [y,m] = ym.split('-');
   const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   return names[+m-1] + '/' + y.slice(2);
@@ -35,8 +103,10 @@ function txForMonth(ym) {
 }
 function showToast(msg) {
   const t = document.getElementById('toast');
-  t.textContent = msg; t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 2200);
+  if(t) {
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
 }
 
 // ── TYPE / CATEGORY ──────────────────────────────────────────────────────────
@@ -50,24 +120,6 @@ function updateCategorySelect() {
   const sel = document.getElementById('fCategory');
   const cats = currentType === 'income' ? INCOME_CATS : EXPENSE_CATS;
   sel.innerHTML = cats.map(c => `<option>${c}</option>`).join('');
-}
-
-// ── ADD TRANSACTION ──────────────────────────────────────────────────────────
-function addTransaction() {
-  const desc = document.getElementById('fDesc').value.trim();
-  const amount = parseFloat(document.getElementById('fAmount').value);
-  const cat = document.getElementById('fCategory').value;
-  const date = document.getElementById('fDate').value;
-  if (!desc || !amount || amount <= 0 || !date) { showToast('Preencha todos os campos'); return; }
-  transactions.unshift({id: nextId++, type: currentType, desc, cat, amount, date});
-  document.getElementById('fDesc').value = '';
-  document.getElementById('fAmount').value = '';
-  showToast('Lançamento adicionado!');
-  refresh();
-}
-function deleteTransaction(id) {
-  transactions = transactions.filter(t => t.id !== id);
-  refresh();
 }
 
 // ── MONTH FILTER ──────────────────────────────────────────────────────────────
@@ -94,196 +146,104 @@ function updateMetrics() {
   document.getElementById('balance').textContent = (bal<0?'-':'')+fmt(bal);
   document.getElementById('balance').style.color = bal >= 0 ? 'var(--green)' : 'var(--red)';
   document.getElementById('savingsRate').textContent = rate.toFixed(1)+'%';
-  document.getElementById('savingsRate').style.color = rate >= 20 ? 'var(--green)' : rate >= 0 ? 'var(--amber)' : 'var(--red)';
+  
+  const savingsColor = rate >= 20 ? 'var(--green)' : rate >= 0 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('savingsRate').style.color = savingsColor;
 
   const inc = txs.filter(t=>t.type==='income').length;
   const exp = txs.filter(t=>t.type==='expense').length;
-  document.getElementById('incomeCount').textContent = inc + ' lançamento' + (inc!==1?'s':'');
-  document.getElementById('expenseCount').textContent = exp + ' lançamento' + (exp!==1?'s':'');
-  document.getElementById('balanceSub').innerHTML = bal>=0
-    ? '<span class="delta up">Positivo ✓</span>'
-    : '<span class="delta down">Negativo ✗</span>';
-  document.getElementById('savingsSub').innerHTML = rate >= 20
-    ? '<span class="delta up">Meta atingida ✓</span>'
-    : '<span class="delta">Meta: 20%</span>';
+  document.getElementById('incomeCount').textContent = `${inc} lançamento${inc!==1?'s':''}`;
+  document.getElementById('expenseCount').textContent = `${exp} lançamento${exp!==1?'s':''}`;
 }
 
-// ── BAR CHART ─────────────────────────────────────────────────────────────────
+// ── CHARTS ───────────────────────────────────────────────────────────────────
 function updateBarChart() {
+  const canvas = document.getElementById('barChart');
+  if(!canvas) return;
   const months = getMonths().slice(0,6).reverse();
   const incData = months.map(m => txForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0));
   const expData = months.map(m => txForMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0));
   if (barChart) barChart.destroy();
-  barChart = new Chart(document.getElementById('barChart'), {
+  barChart = new Chart(canvas, {
     type: 'bar',
     data: {
       labels: months.map(monthLabel),
       datasets: [
-        { label:'Receitas', data:incData, backgroundColor:'rgba(41,212,122,0.7)', borderRadius:5, borderSkipped:false },
-        { label:'Despesas', data:expData, backgroundColor:'rgba(240,96,96,0.7)', borderRadius:5, borderSkipped:false }
+        { label:'Receitas', data:incData, backgroundColor:'rgba(41,212,122,0.7)', borderRadius:5 },
+        { label:'Despesas', data:expData, backgroundColor:'rgba(240,96,96,0.7)', borderRadius:5 }
       ]
     },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>'R$ '+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}} },
-      scales:{
-        x:{ ticks:{color:'#7a7a95',font:{size:11}}, grid:{color:'rgba(255,255,255,0.04)'} },
-        y:{ ticks:{color:'#7a7a95',font:{size:11},callback:v=>'R$'+Math.round(v/1000)+'k'}, grid:{color:'rgba(255,255,255,0.06)'} }
-      }
-    }
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} }
   });
 }
 
-// ── DONUT CHART ───────────────────────────────────────────────────────────────
 function updateDonutChart() {
+  const canvas = document.getElementById('donutChart');
+  if(!canvas) return;
   const txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
   const expenses = txs.filter(t=>t.type==='expense');
   const bycat = {};
   expenses.forEach(t => { bycat[t.cat] = (bycat[t.cat]||0) + t.amount; });
   const labels = Object.keys(bycat);
   const data = labels.map(l=>bycat[l]);
-  const total = data.reduce((s,v)=>s+v,0);
 
   if (donutChart) donutChart.destroy();
-  donutChart = new Chart(document.getElementById('donutChart'), {
+  donutChart = new Chart(canvas, {
     type:'doughnut',
-    data:{ labels, datasets:[{ data, backgroundColor:CAT_COLORS, borderWidth:2, borderColor:'#16161f', hoverOffset:4 }] },
-    options:{
-      responsive:true, maintainAspectRatio:false, cutout:'68%',
-      plugins:{
-        legend:{display:false},
-        tooltip:{callbacks:{label:c=>`${c.label}: R$${c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})} (${(c.raw/total*100).toFixed(1)}%)`}}
-      }
-    }
-  });
-
-  const leg = document.getElementById('donutLegend');
-  if (labels.length === 0) { leg.innerHTML = '<span style="color:var(--muted);font-size:12px">Nenhuma despesa</span>'; return; }
-  leg.innerHTML = labels.map((l,i) =>
-    `<div class="leg-item"><div class="leg-dot" style="background:${CAT_COLORS[i%CAT_COLORS.length]}"></div>${l}: ${(data[i]/total*100).toFixed(0)}%</div>`
-  ).join('');
-}
-
-// ── LINE CHART ────────────────────────────────────────────────────────────────
-function updateLineChart() {
-  const months = getMonths().slice(0,6).reverse();
-  let running = 0;
-  const balData = months.map(m => {
-    const inc = txForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
-    const exp = txForMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
-    running += inc - exp;
-    return running;
-  });
-  if (lineChart) lineChart.destroy();
-  lineChart = new Chart(document.getElementById('lineChart'), {
-    type:'line',
-    data:{
-      labels: months.map(monthLabel),
-      datasets:[{
-        label:'Saldo acumulado', data:balData,
-        borderColor:'#5b8af5', backgroundColor:'rgba(91,138,245,0.08)',
-        borderWidth:2, pointBackgroundColor:'#5b8af5', pointRadius:4, tension:0.35, fill:true
-      }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>'R$'+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}},
-      scales:{
-        x:{ticks:{color:'#7a7a95',font:{size:11}}, grid:{color:'rgba(255,255,255,0.04)'}},
-        y:{ticks:{color:'#7a7a95',font:{size:11},callback:v=>'R$'+Math.round(v/1000)+'k'}, grid:{color:'rgba(255,255,255,0.06)'}}
-      }
-    }
+    data:{ labels, datasets:[{ data, backgroundColor:CAT_COLORS }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{legend:{display:false}} }
   });
 }
 
-// ── INCOME BAR ────────────────────────────────────────────────────────────────
-function updateIncomeBar() {
-  const txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
-  const incomes = txs.filter(t=>t.type==='income');
-  const bycat = {};
-  incomes.forEach(t => { bycat[t.cat] = (bycat[t.cat]||0) + t.amount; });
-  const labels = Object.keys(bycat);
-  const data = labels.map(l=>bycat[l]);
-  if (incomeBarChart) incomeBarChart.destroy();
-  incomeBarChart = new Chart(document.getElementById('incomeBarChart'), {
-    type:'bar',
-    data:{
-      labels,
-      datasets:[{ data, backgroundColor:labels.map((_,i)=>CAT_COLORS[i%CAT_COLORS.length]), borderRadius:5, borderSkipped:false }]
-    },
-    options:{
-      responsive:true, maintainAspectRatio:false, indexAxis:'y',
-      plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>'R$'+c.raw.toLocaleString('pt-BR',{minimumFractionDigits:2})}}},
-      scales:{
-        x:{ticks:{color:'#7a7a95',font:{size:11},callback:v=>'R$'+Math.round(v/1000)+'k'}, grid:{color:'rgba(255,255,255,0.06)'}},
-        y:{ticks:{color:'#7a7a95',font:{size:11}}, grid:{display:false}}
-      }
-    }
-  });
-}
-
-// ── TRANSACTIONS ──────────────────────────────────────────────────────────────
-function renderTransactions() {
-  const q = document.getElementById('txSearch').value.toLowerCase();
-  let txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
-  if (q) txs = txs.filter(t => t.desc.toLowerCase().includes(q) || t.cat.toLowerCase().includes(q));
-  txs = [...txs].sort((a,b) => b.date.localeCompare(a.date));
-  const el = document.getElementById('txList');
-  if (txs.length === 0) { el.innerHTML = '<div class="empty">Nenhum lançamento encontrado</div>'; return; }
-  el.innerHTML = txs.map(t => {
-    const icon = CAT_ICONS[t.cat] || '📌';
-    const bg = t.type==='income' ? 'var(--green-dim)' : 'var(--red-dim)';
-    const [y,m,d] = t.date.split('-');
-    return `<div class="tx-item">
-      <div class="tx-left">
-        <div class="tx-icon" style="background:${bg}">${icon}</div>
-        <div>
-          <div class="tx-desc">${t.desc}</div>
-          <div class="tx-meta">${t.cat} · ${d}/${m}/${y}</div>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center">
-        <div class="tx-amount ${t.type==='income'?'pos':'neg'}">${t.type==='income'?'+':'-'}${fmt(t.amount)}</div>
-        <button class="tx-del" onclick="deleteTransaction(${t.id})" title="Excluir">×</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-const SITE_PASSWORD = process.env.DB_PASSWORD;
-
+// ── AUTENTICAÇÃO ─────────────────────────────────────────────────────────────
 function checkPassword() {
   const input = document.getElementById("passwordInput").value;
   const error = document.getElementById("errorMsg");
 
   if (input === SITE_PASSWORD) {
     document.getElementById("lockScreen").style.display = "none";
-    localStorage.setItem("auth", "true");
+    localStorage.setItem("auth_financas", "true");
+    loadData(); // Agora carrega da nuvem após o login
   } else {
     error.textContent = "Senha incorreta";
   }
 }
 
-// manter logado
-window.onload = () => {
-  if (localStorage.getItem("auth") === "true") {
-    document.getElementById("lockScreen").style.display = "none";
-  }
-};
-
-// ── REFRESH ───────────────────────────────────────────────────────────────────
+// ── REFRESH TOTAL ─────────────────────────────────────────────────────────────
 function refresh() {
   buildMonthFilter();
   updateMetrics();
   updateBarChart();
   updateDonutChart();
-  updateLineChart();
-  updateIncomeBar();
   renderTransactions();
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
-document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
-updateCategorySelect();
-refresh();
+function renderTransactions() {
+  const el = document.getElementById('txList');
+  if(!el) return;
+  let txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
+  
+  if (txs.length === 0) { 
+    el.innerHTML = '<div class="empty">Nenhum lançamento</div>'; 
+    return; 
+  }
+  
+  el.innerHTML = txs.map(t => {
+    const [y,m,d] = t.date.split('-');
+    return `<div class="tx-item">
+      <span>${CAT_ICONS[t.cat] || '📌'} ${t.desc} (${d}/${m})</span>
+      <span class="${t.type}">${t.type==='income'?'+':'-'} ${fmt(t.amount)}</span>
+      <button onclick="deleteTransaction(${t.id})">×</button>
+    </div>`;
+  }).join('');
+}
 
+// Manter logado e Inicializar
+window.onload = async () => {
+  if (localStorage.getItem("auth_financas") === "true") {
+    document.getElementById("lockScreen").style.display = "none";
+    await loadData();
+  }
+  document.getElementById('fDate').value = new Date().toISOString().slice(0,10);
+  updateCategorySelect();
+};

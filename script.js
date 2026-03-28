@@ -250,7 +250,7 @@ function renderTransactions() {
   }).join('');
 }
 
-const SITE_PASSWORD = "1234"; // MUDA AQUI
+const SITE_PASSWORD = process.env.DB_PASSWORD;
 
 function checkPassword() {
   const input = document.getElementById("passwordInput").value;

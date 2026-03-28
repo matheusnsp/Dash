@@ -32,8 +32,8 @@ async function loadData() {
     console.error('Erro ao buscar dados:', error);
     showToast('Erro ao carregar dados');
   } else {
-    // Garante que amount seja sempre número para evitar bugs nos gráficos
-    transactions = data.map(t => ({ ...t, amount: parseFloat(t.amount) }));
+    // Garante que o amount seja tratado como número real
+    transactions = data.map(t => ({ ...t, amount: parseFloat(t.amount) || 0 }));
     refresh(); 
   }
 }
@@ -50,11 +50,9 @@ async function addTransaction() {
   }
   
   const newTx = { type: currentType, desc, cat, amount, date };
-
   const { error } = await supabaseClient.from('transactions').insert([newTx]);
 
   if (error) {
-    console.error('Erro de inserção:', error);
     showToast('Erro ao salvar no banco');
   } else {
     showToast('Salvo na nuvem! ✅');
@@ -66,16 +64,9 @@ async function addTransaction() {
 
 async function deleteTransaction(id) {
   if(confirm("Deseja excluir permanentemente?")) {
-    const { error } = await supabaseClient
-      .from('transactions')
-      .delete()
-      .eq('id', id); 
-    
-    if (error) {
-      showToast('Erro ao deletar');
-    } else {
-      await loadData();
-    }
+    const { error } = await supabaseClient.from('transactions').delete().eq('id', id); 
+    if (error) showToast('Erro ao deletar');
+    else await loadData();
   }
 }
 
@@ -125,10 +116,11 @@ function buildMonthFilter() {
   const months = getMonths();
   if (!selectedMonth || !months.includes(selectedMonth)) selectedMonth = months[0] || null;
   const cont = document.getElementById('monthFilter');
-  if(!cont) return;
-  cont.innerHTML = months.map(m =>
-    `<button class="month-btn${m===selectedMonth?' active':''}" onclick="selectMonth('${m}')">${monthLabel(m)}</button>`
-  ).join('');
+  if(cont) {
+    cont.innerHTML = months.map(m =>
+      `<button class="month-btn${m===selectedMonth?' active':''}" onclick="selectMonth('${m}')">${monthLabel(m)}</button>`
+    ).join('');
+  }
 }
 
 function selectMonth(m) { selectedMonth = m; refresh(); }
@@ -155,13 +147,16 @@ function updateMetrics() {
   document.getElementById('expenseCount').textContent = `${exp} lançamento${exp!==1?'s':''}`;
 }
 
-// ── GRÁFICOS (CHART.JS) ──────────────────────────────────────────────────────
+// ── GRÁFICOS (CHART.JS) CORRIGIDOS ───────────────────────────────────────────
+
 function updateBarChart() {
   const canvas = document.getElementById('barChart');
   if(!canvas) return;
   const months = getMonths().slice(0,6).reverse();
-  const incData = months.map(m => txForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0));
-  const expData = months.map(m => txForMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0));
+  
+  // Garante que a soma trate amount como número
+  const incData = months.map(m => txForMonth(m).filter(t=>t.type==='income').reduce((s,t)=>s+parseFloat(t.amount),0));
+  const expData = months.map(m => txForMonth(m).filter(t=>t.type==='expense').reduce((s,t)=>s+parseFloat(t.amount),0));
   
   if (barChart) barChart.destroy();
   barChart = new Chart(canvas, {
@@ -186,14 +181,17 @@ function updateDonutChart() {
   const canvas = document.getElementById('donutChart');
   if(!canvas) return;
   
-  // Filtra as transações baseadas no mês selecionado
+  // IMPORTANTE: Se o selectedMonth for nulo, pegamos tudo para o gráfico não ficar vazio
   const txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
-  const expenses = txs.filter(t => t.type === 'expense');
   
+  // Mudança: Vamos mostrar RECEITAS por categoria se não houver DESPESAS no mês
+  const expenses = txs.filter(t => t.type === 'expense');
+  const typeToShow = expenses.length > 0 ? 'expense' : 'income';
+  const targetTxs = txs.filter(t => t.type === typeToShow);
+
   const bycat = {};
-  expenses.forEach(t => { 
-    // Garante que o nome da categoria bata com o ícone/texto, ignorando erros de caixa alta/baixa
-    bycat[t.cat] = (bycat[t.cat] || 0) + t.amount; 
+  targetTxs.forEach(t => { 
+    bycat[t.cat] = (bycat[t.cat] || 0) + parseFloat(t.amount); 
   });
   
   const labels = Object.keys(bycat);
@@ -201,17 +199,17 @@ function updateDonutChart() {
 
   if (donutChart) donutChart.destroy();
   
-  if (data.length === 0) {
-    // Limpa o canvas se não houver despesas no mês
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    return;
-  }
+  if (data.length === 0) return;
 
   donutChart = new Chart(canvas, {
     type:'doughnut',
     data:{ labels, datasets:[{ data, backgroundColor:CAT_COLORS }] },
-    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{legend:{display:false}} }
+    options:{ 
+      responsive:true, 
+      maintainAspectRatio:false, 
+      cutout:'68%', 
+      plugins:{legend:{display:false}} 
+    }
   });
 }
 

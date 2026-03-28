@@ -2,7 +2,6 @@
 const SUPABASE_URL = 'https://llzzyoddlykhoowanfju.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsenp5b2RkbHlraG9vd2FuZmp1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ2NTI4NTksImV4cCI6MjA5MDIyODg1OX0.YmxSIWjPl2xs4Ayt_jhp8HkPZkgW2xCs-D4duJuMQls';
 
-// Inicializa o cliente do Supabase
 const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── CONFIGURAÇÃO DE SEGURANÇA ────────────────────────────────────────────────
@@ -18,14 +17,13 @@ const CAT_ICONS = {
 };
 const CAT_COLORS = ['#29d47a','#5b8af5','#f5b642','#f06060','#a78bfa','#2dd4bf','#f472b6','#fb923c','#7a7a95'];
 
-let transactions = []; // Agora vem do banco
+let transactions = []; 
 let currentType = 'income';
 let selectedMonth = null;
 let barChart, donutChart;
 
 // ── DATA PERSISTENCE (Supabase) ──────────────────────────────────────────────
 
-// BUSCAR DADOS DO BANCO
 async function loadData() {
   const { data, error } = await supabaseClient
     .from('transactions')
@@ -34,14 +32,13 @@ async function loadData() {
 
   if (error) {
     console.error('Erro ao buscar dados:', error);
-    showToast('Erro ao carregar dados da nuvem');
+    showToast('Erro ao carregar dados');
   } else {
     transactions = data;
     refresh(); 
   }
 }
 
-// SALVAR NO BANCO
 async function addTransaction() {
   const desc = document.getElementById('fDesc').value.trim();
   const amount = parseFloat(document.getElementById('fAmount').value);
@@ -53,28 +50,35 @@ async function addTransaction() {
     return; 
   }
   
-  const newTx = { type: currentType, desc, cat, amount, date };
+  // IMPORTANTE: Não enviamos o ID, o Supabase gera sozinho
+  const newTx = { 
+    type: currentType, 
+    desc: desc, 
+    cat: cat, 
+    amount: amount, 
+    date: date 
+  };
 
   const { error } = await supabaseClient.from('transactions').insert([newTx]);
 
   if (error) {
-    console.error('Erro ao inserir:', error);
-    showToast('Erro ao salvar no banco');
+    console.error('Erro de inserção:', error);
+    // Se der erro aqui, verifique se você mudou a Primary Key no Painel do Supabase
+    showToast('Erro ao salvar no banco. Verifique o ID!');
   } else {
-    showToast('Lançamento salvo na nuvem! ✅');
+    showToast('Lançamento salvo! ✅');
     document.getElementById('fDesc').value = '';
     document.getElementById('fAmount').value = '';
-    await loadData(); // Recarrega os dados para atualizar os gráficos
+    await loadData(); 
   }
 }
 
-// EXCLUIR DO BANCO
 async function deleteTransaction(id) {
-  if(confirm("Deseja excluir permanentemente este lançamento?")) {
+  if(confirm("Deseja excluir permanentemente?")) {
     const { error } = await supabaseClient
       .from('transactions')
       .delete()
-      .eq('id', id);
+      .eq('id', id); // Usa o ID único gerado pelo banco
     
     if (error) {
       showToast('Erro ao deletar');
@@ -84,23 +88,27 @@ async function deleteTransaction(id) {
   }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// ── HELPERS / UI ─────────────────────────────────────────────────────────────
 function fmt(v) {
   return 'R$ ' + Math.abs(v).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
+
 function getMonths() {
   const set = new Set(transactions.map(t => t.date.slice(0,7)));
   return [...set].sort().reverse();
 }
+
 function monthLabel(ym) {
   if(!ym) return "";
   const [y,m] = ym.split('-');
   const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
   return names[+m-1] + '/' + y.slice(2);
 }
+
 function txForMonth(ym) {
   return transactions.filter(t => t.date.startsWith(ym));
 }
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   if(t) {
@@ -109,20 +117,19 @@ function showToast(msg) {
   }
 }
 
-// ── TYPE / CATEGORY ──────────────────────────────────────────────────────────
 function setType(type) {
   currentType = type;
   document.getElementById('btnIncome').className = 'type-btn' + (type==='income'?' active-income':'');
   document.getElementById('btnExpense').className = 'type-btn' + (type==='expense'?' active-expense':'');
   updateCategorySelect();
 }
+
 function updateCategorySelect() {
   const sel = document.getElementById('fCategory');
   const cats = currentType === 'income' ? INCOME_CATS : EXPENSE_CATS;
   sel.innerHTML = cats.map(c => `<option>${c}</option>`).join('');
 }
 
-// ── MONTH FILTER ──────────────────────────────────────────────────────────────
 function buildMonthFilter() {
   const months = getMonths();
   if (!selectedMonth || !months.includes(selectedMonth)) selectedMonth = months[0] || null;
@@ -131,9 +138,9 @@ function buildMonthFilter() {
     `<button class="month-btn${m===selectedMonth?' active':''}" onclick="selectMonth('${m}')">${monthLabel(m)}</button>`
   ).join('');
 }
+
 function selectMonth(m) { selectedMonth = m; refresh(); }
 
-// ── METRICS ──────────────────────────────────────────────────────────────────
 function updateMetrics() {
   const txs = selectedMonth ? txForMonth(selectedMonth) : transactions;
   const income = txs.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0);
@@ -203,7 +210,7 @@ function checkPassword() {
   if (input === SITE_PASSWORD) {
     document.getElementById("lockScreen").style.display = "none";
     localStorage.setItem("auth_financas", "true");
-    loadData(); // Agora carrega da nuvem após o login
+    loadData(); 
   } else {
     error.textContent = "Senha incorreta";
   }
@@ -233,12 +240,12 @@ function renderTransactions() {
     return `<div class="tx-item">
       <span>${CAT_ICONS[t.cat] || '📌'} ${t.desc} (${d}/${m})</span>
       <span class="${t.type}">${t.type==='income'?'+':'-'} ${fmt(t.amount)}</span>
-      <button onclick="deleteTransaction(${t.id})">×</button>
+      <button onclick="deleteTransaction('${t.id}')">×</button>
     </div>`;
   }).join('');
 }
 
-// Manter logado e Inicializar
+// Inicialização
 window.onload = async () => {
   if (localStorage.getItem("auth_financas") === "true") {
     document.getElementById("lockScreen").style.display = "none";
